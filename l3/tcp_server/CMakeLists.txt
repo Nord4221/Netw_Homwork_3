@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(tcp_server C CXX)
 
-set(${PROJECT_NAME}_SRC color_input.h color_input.cpp msg_analyzer.h msg_analyzer.cpp main.cpp)
+set(${PROJECT_NAME}_SRC socket_controller.h socket_controller.cpp color_input.h color_input.cpp msg_analyzer.h msg_analyzer.cpp main.cpp)
 
 source_group(source FILES ${${PROJECT_NAME}_SRC}})
 
