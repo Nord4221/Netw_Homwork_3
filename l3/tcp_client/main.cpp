@@ -23,41 +23,11 @@ extern "C"
 #include <socket_wrapper/socket_class.h>
 
 #include "client_msg_analyzer.h"
-
+#include "socket_controller.h"
 using namespace std::chrono_literals;
 
 const auto MAX_RECV_BUFFER_SIZE = 256;
 const auto MIN_MSG_SIZE = 20;
-
-bool send_request(socket_wrapper::Socket &sock, const std::string &request)
-{
-    ssize_t bytes_count = 0;
-    size_t req_pos = 0;
-    auto const req_buffer = &(request.c_str()[0]);
-    auto const req_length = request.length();
-
-    while (true)
-    {
-        if ((bytes_count = send(sock, req_buffer + req_pos, req_length - req_pos, 0)) < 0)
-        {
-            if (EINTR == errno) continue;
-        }
-        else
-        {
-            if (!bytes_count) break;
-
-            req_pos += bytes_count;
-
-            if (req_pos >= req_length)
-            {
-                break;
-            }
-        }
-    }
-
-    return true;
-}
-
 
 int main(int argc, const char * const argv[])
 {
@@ -67,58 +37,15 @@ int main(int argc, const char * const argv[])
         std::cout << "Usage: " << argv[0] << " <host> <port>" << std::endl;
         return EXIT_FAILURE;
     }
-
-    socket_wrapper::SocketWrapper sock_wrap;
-    socket_wrapper::Socket sock = {AF_INET, SOCK_STREAM, IPPROTO_TCP};
-
-    if (!sock)
-    {
-        std::cerr << sock_wrap.get_last_error_string() << std::endl;
+    SocketController* socket_controller = new SocketController();
+    if(socket_controller->client_socket_init(argv[1],std::stoi(argv[2])) != EXIT_SUCCESS)
         return EXIT_FAILURE;
-    }
-
-    const std::string host_name = { argv[1] };
-    const struct hostent *remote_host { gethostbyname(host_name.c_str()) };
-
-    struct sockaddr_in server_addr =
-    {
-        .sin_family = AF_INET,
-        .sin_port = htons(std::stoi(argv[2]))
-    };
-
-    server_addr.sin_addr.s_addr = *reinterpret_cast<const in_addr_t*>(remote_host->h_addr);
-
-    if (connect(sock, reinterpret_cast<const sockaddr* const>(&server_addr), sizeof(server_addr)) != 0)
-    {
-        std::cerr << sock_wrap.get_last_error_string() << std::endl;
-        return EXIT_FAILURE;
-    }
 
     std::string request;
     std::vector<char> buffer;
     buffer.resize(MAX_RECV_BUFFER_SIZE);
 
-    std::cout << "Connected to \"" << host_name << "\"..." << std::endl;
-
-    const IoctlType flag = 1;
-
-    // Put the socket in non-blocking mode:
-//#if !defined(_WIN32)
-//    if (fcntl(sock, F_SETFL, fcntl(sock, F_GETFL) | O_NONBLOCK) < 0)
-//#else
-    if (ioctl(sock, FIONBIO, const_cast<IoctlType*>(&flag)) < 0)
-//#endif
-    {
-        std::cerr << sock_wrap.get_last_error_string() << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    // Disable Naggles's algorithm.
-    if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&flag), sizeof(flag)) < 0)
-    {
-        std::cerr << sock_wrap.get_last_error_string() << std::endl;
-        return EXIT_FAILURE;
-    }
+    std::cout << "Connected to \"" << socket_controller->get_hostname() << "\"..." << std::endl;
 
     std::cout << "Waiting for the user input..." << std::endl;
     int state_of_client = _state_get_user_msg;
@@ -140,9 +67,9 @@ int main(int argc, const char * const argv[])
 
                 request += "\r\n";
 
-                if (!send_request(sock, request))
+                if (!socket_controller->write_data(request))
                 {
-                    std::cerr << sock_wrap.get_last_error_string() << std::endl;
+                    std::cerr << "Request error" << std::endl;
                     return EXIT_FAILURE;
                 }
 
@@ -155,7 +82,7 @@ int main(int argc, const char * const argv[])
             case _state_recieve_with_command_check:
                 while (true)
                 {
-                    recv_bytes = recv(sock, buffer.data(), buffer.size() - 1, 0);
+                    recv_bytes = socket_controller->read_data(buffer.data(), buffer.size() - 1);
 
                     std::cout
                         << recv_bytes
@@ -190,7 +117,7 @@ int main(int argc, const char * const argv[])
             case _state_recieve_without_command_check:
                 while (true)
                 {
-                    recv_bytes = recv(sock, buffer.data(), buffer.size() - 1, 0);
+                    recv_bytes = socket_controller->read_data(buffer.data(), buffer.size() - 1);
                     bytes_enough_recieved += recv_bytes;
                     if (bytes_enough_recieved >= MIN_MSG_SIZE)
                     {

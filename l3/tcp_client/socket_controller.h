@@ -7,41 +7,36 @@
 
 #include "color_input.h"
 
+
+#include <netinet/tcp.h>
+#include <sys/ioctl.h>
 extern "C"
 {
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 }
 
+
 class SocketController
 {
 public:
     SocketController();
     ~SocketController();
-    int server_socket_init(int server_port);
-    int client_socket_init();
+    int client_socket_init(const char* server_ip, int server_port);
     int init_ssl_wrapper();
     void log_ssl();
-    int read_data(char* data_buffer, int data_size);
-    int write_data(char* data_to_send, int data_size);
+    int  read_data(char* data_buffer, int data_size);
+    bool write_data(const std::string &request);
     bool get_ssl_rw_error(int msg_length);
-    char*   get_hostname();
-    char*   get_server_info();
-    const char *get_client_addr();
-    int     get_client_port();
+    std::string *get_hostname();
 private:
-//Server Part:
+//Client Part:
     socket_wrapper::SocketWrapper* _sock_wrap_ptr = nullptr;
-    socket_wrapper::Socket* _server_socket_ptr = nullptr;
-    char _hostname[NI_MAXHOST];
-    char _server_info[NI_MAXSERV];
+    socket_wrapper::Socket* _client_socket_ptr = nullptr;
     int _server_port;
     sockaddr_in _server_addr;\
-//Client Part:
-    socket_wrapper::Socket* _client_socket_ptr = nullptr;
-    struct sockaddr_in _client_address = {0};
-    socklen_t _client_address_len = sizeof(sockaddr_in);
-    char _client_address_buf[INET_ADDRSTRLEN];
+    std::string* _hostname;
+    struct sockaddr_in _server_address = {0};
 //SSL Part:
     SSL *_ssl = nullptr;
     SSL_CTX *_ctx = nullptr;
